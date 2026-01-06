@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/Mystic-Frontier-Calculator-/static/css/main.88c0f3fa.css",
+    "main.js": "/Mystic-Frontier-Calculator-/static/js/main.07f33b4a.js",
+    "static/js/453.a20e7a0e.chunk.js": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js",
+    "index.html": "/Mystic-Frontier-Calculator-/index.html",
+    "main.88c0f3fa.css.map": "/Mystic-Frontier-Calculator-/static/css/main.88c0f3fa.css.map",
+    "main.07f33b4a.js.map": "/Mystic-Frontier-Calculator-/static/js/main.07f33b4a.js.map",
+    "453.a20e7a0e.chunk.js.map": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.88c0f3fa.css",
+    "static/js/main.07f33b4a.js"
+  ]
+}
