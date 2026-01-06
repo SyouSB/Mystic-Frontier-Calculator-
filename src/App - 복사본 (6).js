@@ -241,6 +241,23 @@ const App = () => {
     const cleanCtx = cleanCanvas.getContext('2d');
     cleanCtx.drawImage(canvas, 0, 0);
 
+    ctx.save();
+    ctx.strokeStyle = '#ffff00';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(attrRect.x, attrRect.y, attrRect.w, attrRect.h);
+    ctx.fillStyle = '#ffff00';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText("OCR AREA", attrRect.x, attrRect.y - 5);
+    
+    ctx.strokeStyle = '#00bfff';
+    ctx.strokeRect(siteRect.x, siteRect.y, siteRect.w, siteRect.h);
+    ctx.fillText("SITE AREA", siteRect.x, siteRect.y - 5);
+
+    ctx.strokeStyle = '#00ff00';
+    ctx.strokeRect(diceRect.x, diceRect.y, diceRect.w, diceRect.h);
+    ctx.fillText("DICE AREA", diceRect.x, diceRect.y - 5);
+    ctx.restore();
+
     const src = cv.imread(canvas);
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
@@ -356,6 +373,23 @@ const App = () => {
     }).sort((a, b) => a.x - b.x);    
 
     if (finalDice.length >= 2) lastSuccessfulScale.current = finalDice[0].usedScale;
+
+    finalDice.forEach(d => {
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(d.x, d.y, d.w, d.h);
+      ctx.fillStyle = '#00ff00';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(`${d.id}`, d.x, d.y - 5);
+    });
+
+    finalSites.forEach(s => {
+      ctx.strokeStyle = '#00bfff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x, s.y, s.w, s.h);
+      ctx.fillStyle = '#00bfff';
+      ctx.font = 'bold 12px Arial';
+    });
 
     let ocrResult = { rawText: "", effects: [] };
     if (attrRect.w > 20 && attrRect.h > 10) {
