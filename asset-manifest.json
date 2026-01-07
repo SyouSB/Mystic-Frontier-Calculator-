@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/Mystic-Frontier-Calculator-/static/css/main.337bb6d8.css",
-    "main.js": "/Mystic-Frontier-Calculator-/static/js/main.704f87cd.js",
+    "main.js": "/Mystic-Frontier-Calculator-/static/js/main.9db32cc3.js",
     "static/js/453.a20e7a0e.chunk.js": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js",
     "index.html": "/Mystic-Frontier-Calculator-/index.html",
     "main.337bb6d8.css.map": "/Mystic-Frontier-Calculator-/static/css/main.337bb6d8.css.map",
-    "main.704f87cd.js.map": "/Mystic-Frontier-Calculator-/static/js/main.704f87cd.js.map",
+    "main.9db32cc3.js.map": "/Mystic-Frontier-Calculator-/static/js/main.9db32cc3.js.map",
     "453.a20e7a0e.chunk.js.map": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.337bb6d8.css",
-    "static/js/main.704f87cd.js"
+    "static/js/main.9db32cc3.js"
   ]
 }
