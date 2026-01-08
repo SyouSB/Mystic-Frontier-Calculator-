@@ -12,8 +12,8 @@ const ROI_PCT = {
 const SITE_SCALE_FACTOR = 2.5;
 
 const PATTERNS = {
-  diceTotal: /Dice\s*Total\s*[:;.]?\s*([+-]?\d+)/i,
-  multiplier: /Final\s*Multiplier\s*[:;.]?\s*\+?([\d.]+)/i
+  diceTotal: /Dice\s*Total\s*[^0-9+-]*([+-]?[\d\s]+)/i,
+  multiplier: /Final\s*[^0-9+-]*\+?\s*([\d\s.]+)/i
 };
 
 const RANK_COLORS = {
@@ -322,11 +322,11 @@ const App = () => {
         const cw = canvas.width;
         const ch = canvas.height;
 
+        const src = track(cv.imread(canvas));
+
         if (showDebug) {
              drawROIs(ctx, cw, ch);
         }
-
-        const src = track(cv.imread(canvas));
         const srcRGB = track(new cv.Mat());
         cv.cvtColor(src, srcRGB, cv.COLOR_RGBA2RGB, 0);
 
@@ -486,12 +486,8 @@ const App = () => {
 
         if (shouldRunOCR) {
             if (attrRect.w > 20 && attrRect.h > 10) {
-                const cleanCanvas = document.createElement('canvas');
-                cleanCanvas.width = cw; cleanCanvas.height = ch;
-                const cleanCtx = cleanCanvas.getContext('2d');
-                cleanCtx.drawImage(canvas, 0, 0);
-                
-                ocrResult = await runOCR(cv, cleanCanvas, attrRect);
+                // Pass the clean source Mat directly to avoid debug overlays
+                ocrResult = await runOCR(cv, src, attrRect);
 
                 lastOcrResultRef.current = ocrResult;
                 
@@ -661,28 +657,28 @@ const App = () => {
       });
   };
 
-  const runOCR = async (cv, mainCanvas, region) => {
-    let src = null;
+  const runOCR = async (cv, srcMat, region) => {
     let roi = null;
     let enlarged = null;
 
     try {
-        src = cv.imread(mainCanvas);
         let rect = new cv.Rect(region.x, region.y, region.w, region.h);
-        roi = src.roi(rect);
+        roi = srcMat.roi(rect);
 
         enlarged = new cv.Mat();
-        let scale = 4.0; 
+        let scale = 3.0; 
         let dsize = new cv.Size(region.w * scale, region.h * scale);
         cv.resize(roi, enlarged, dsize, 0, 0, cv.INTER_CUBIC);
+        
+        // 그레이스케일 변환
         cv.cvtColor(enlarged, enlarged, cv.COLOR_RGBA2GRAY, 0);
 
-        let ksize = new cv.Size(3, 3);
-        cv.GaussianBlur(enlarged, enlarged, ksize, 0, 0, cv.BORDER_DEFAULT);
-
+        // 이진화 (Otsu): 밝은 글자(흰색)를 255로, 어두운 배경을 0으로 분리
         cv.threshold(enlarged, enlarged, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+
+        // 색상 반전: 검은 글자/흰 배경으로 변환
         cv.bitwise_not(enlarged, enlarged);
-       
+
         const tempCanvas = document.createElement('canvas');
         cv.imshow(tempCanvas, enlarged);
 
@@ -692,7 +688,7 @@ const App = () => {
             text = res.data.text;
         } else {
             const { data } = await Tesseract.recognize(tempCanvas, 'eng');
-            text = data.text;
+            text = data.data.text;
         }
 
         const normalizedText = text.replace(/\n/g, " ");
@@ -714,11 +710,14 @@ const App = () => {
 
             let conditionText = trimmed.substring(0, effectIndex).replace(/[:;.,-]$/, "").trim();
             
+            const totalStr = totalMatch ? totalMatch[1].replace(/\s+/g, '') : "0";
+            const multiStr = multiMatch ? multiMatch[1].replace(/\s+/g, '') : "0";
+
             parsedEffects.push({
               text: trimmed, 
               condition: conditionText,
-              diceTotal: totalMatch ? parseInt(totalMatch[1]) : 0,
-              multiplier: multiMatch ? parseFloat(multiMatch[1]) : 0
+              diceTotal: parseInt(totalStr) || 0,
+              multiplier: parseFloat(multiStr) || 0
             });
           }
         });
@@ -728,7 +727,6 @@ const App = () => {
         console.error("OCR Error:", e);
         return { rawText: "", effects: [] };
     } finally {
-        if(src) src.delete();
         if(roi) roi.delete();
         if(enlarged) enlarged.delete();
     }
