@@ -16,12 +16,13 @@ const PATTERNS = {
   multiplier: /Final\s*[^0-9+-]*\+?\s*([\d\s.]+)/i
 };
 
+// 색상 기반 등급 판정
 const RANK_COLORS = {
-  'Common': { r: 120, g: 120, b: 110 },
-  'Unique': { r: 215, g: 140, b: 60 },
-  'Legendry': { r: 80, g: 190, b: 80 },
-  'Rare': { r: 80, g: 150, b: 155 },
-  'Epic': { r: 145, g: 100, b: 155 }
+  'Common': { r: 120, g: 120, b: 110 },   // Gray
+  'Rare': { r: 80, g: 150, b: 155 },     // Blue
+  'Epic': { r: 145, g: 100, b: 155 },    // Purple
+  'Unique': { r: 215, g: 140, b: 60 },   // Orange
+  'Legendry': { r: 80, g: 190, b: 80 }   // Green
 };
 
 const SITE_IMAGES = {
@@ -258,16 +259,20 @@ const App = () => {
     let roi = null;
     let srcRGB = null;
     try {
+        // 중앙 부분 50%만 샘플링하여 속도 최적화
         const scale = 0.5; 
         const newW = Math.floor(rect.w * scale);
         const newH = Math.floor(rect.h * scale);
         const newX = Math.floor(rect.x + (rect.w - newW) / 2);
         const newY = Math.floor(rect.y + (rect.h - newH) / 2);
 
+        // 이미지 범위 체크
         const finalX = Math.max(0, newX);
         const finalY = Math.max(0, newY);
         const finalW = Math.min(newW, srcMat.cols - finalX);
         const finalH = Math.min(newH, srcMat.rows - finalY);
+
+        if (finalW <= 0 || finalH <= 0) return { rank: 'Common', r: 0, g: 0, b: 0 };
 
         roi = srcMat.roi(new cv.Rect(finalX, finalY, finalW, finalH));
         srcRGB = new cv.Mat();
@@ -282,6 +287,7 @@ const App = () => {
         let closestRank = 'Common';
 
         for (const [rank, color] of Object.entries(RANK_COLORS)) {
+            // 유클리드 거리로 색상 차이 계산
             const dist = Math.sqrt(
                 Math.pow(r - color.r, 2) + 
                 Math.pow(g - color.g, 2) + 
@@ -294,6 +300,8 @@ const App = () => {
         }
 
         return { rank: closestRank, r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+    } catch(e) {
+        return { rank: 'Common', r: 0, g: 0, b: 0 };
     } finally {
         if (roi) roi.delete();
         if (srcRGB) srcRGB.delete();
@@ -457,9 +465,23 @@ const App = () => {
         const finalDice = applyNMS(diceCandidates, 0.4).sort((a, b) => a.x - b.x);
         let detectedSites = applyNMS(siteCandidates, 0.4); 
 
-        // Simplified: Just calculate RGB for display, do NOT override rank.
+        // [Color Override Logic]
+        // 템플릿 매칭은 모양(S_x 등)만 신뢰하고, 등급(Rare 등)은 색상 분석으로 결정
         const finalSites = detectedSites.map(site => {
-            const { r, g, b } = getRankFromROI(cv, src, site);
+            const { rank, r, g, b } = getRankFromROI(cv, src, site);
+            
+            // 기존 ID (예: S_x_Rare)에서 앞부분 (S_x)만 추출
+            const parts = site.id.split('_');
+            if (parts.length >= 3) {
+                parts.pop(); // 기존 rank 제거
+                parts.push(rank); // 색상 분석된 rank 추가
+                const newId = parts.join('_');
+                
+                // 만약 조합된 새 ID가 유효한 이미지 목록에 있다면 교체
+                if (SITE_IMAGES[newId] || SITE_IMAGES[newId.replace('dice/', '')]) {
+                    return { ...site, id: newId, r, g, b }; 
+                }
+            }
             return { ...site, r, g, b };
         }).sort((a, b) => a.x - b.x);    
 
@@ -870,7 +892,7 @@ const App = () => {
                     <div>
                       <strong>{displayName}</strong>
                       <div style={{ fontSize: '10px', color: '#888' }}>
-                        {effectDesc || `RGB: (${s.r}, ${s.g}, ${s.b})`}
+                        {effectDesc || `Score: ${(s.score * 100).toFixed(1)}%`}
                       </div>
                     </div>
                   </div>
