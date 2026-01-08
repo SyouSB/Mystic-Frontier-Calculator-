@@ -12,7 +12,7 @@ const ROI_PCT = {
 const SITE_SCALE_FACTOR = 2.5;
 
 const PATTERNS = {
-  diceTotal: /Dice\s*Total\s*[^0-9+-]*([+-]?[\d\s]+)/i,
+  diceTotal: /Dice\s*Total\s*[^0-9+-]*([+-]?\s*\d+)/i,
   multiplier: /Final\s*[^0-9+-]*\+?\s*([\d\s.]+)/i
 };
 
@@ -710,7 +710,9 @@ const App = () => {
 
             let conditionText = trimmed.substring(0, effectIndex).replace(/[:;.,-]$/, "").trim();
             
-            const totalStr = totalMatch ? totalMatch[1].replace(/\s+/g, '') : "0";
+            // Dice Total: 공백 제거 없이 parseInt로 앞부분 숫자만 취함 (+9 7 -> 9)
+            const totalStr = totalMatch ? totalMatch[1] : "0";
+            // Multiplier: 소수점 사이 공백 대응을 위해 공백 제거 유지 (1. 2 -> 1.2)
             const multiStr = multiMatch ? multiMatch[1].replace(/\s+/g, '') : "0";
 
             parsedEffects.push({
