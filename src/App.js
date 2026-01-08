@@ -2,17 +2,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Tesseract from 'tesseract.js';
 import './App.css'; 
 
-// --- Constants (Moved outside component) ---
-// 기준 해상도: 1366 x 768 (개발 환경 기준)
+// 기준 해상도: 1366 x 768 
 const ROI_PCT = {
   DICE: { x: 380/1366, y: 300/768, w: 600/1366, h: 200/768 },
   ATTR: { x: 330/1366, y: 520/768, w: 700/1366, h: 100/768 },
   SITE: { x: 566/1366, y: 595/768, w: 280/1366, h: 65/768 }
 };
 
-// Site 아이콘 인식률을 높이기 위한 확대 배율 (기본값: 2.0)
-// 주의: 값을 너무 높이면(4.0 이상) 연산량이 급증하여 앱이 느려질 수 있습니다.
-const SITE_SCALE_FACTOR = 2.0;
+const SITE_SCALE_FACTOR = 4.0;
 
 const PATTERNS = {
   diceTotal: /Dice\s*Total\s*[:;.]?\s*([+-]?\d+)/i,
@@ -100,19 +97,17 @@ const App = () => {
   const workerRef = useRef(null);
   const isAnalyzingRef = useRef(false);
   
-  // --- Refs for Optimization & Cleanup ---
   const lastAttrMatRef = useRef(null);
   const lastOcrResultRef = useRef(null);
   const analysisIntervalRef = useRef(null);
 
-  // Initialize Tesseract Worker
   useEffect(() => {
     const initWorker = async () => {
       try {
         const worker = await Tesseract.createWorker('eng');
         await worker.setParameters({
           tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:,.+- ',
-          tessedit_pageseg_mode: '6', // Assume a single uniform block of text
+          tessedit_pageseg_mode: '6',
         });
         workerRef.current = worker;
       } catch (err) {
@@ -144,7 +139,6 @@ const App = () => {
       ...Object.entries(SITE_IMAGES).map(([id, path]) => ({ id, path: `dice/${path}` }))
     ];
 
-    // Parallel loading
     const promises = diceFiles.map(file => new Promise((resolve) => {
         const img = new Image();
         img.src = `${process.env.PUBLIC_URL}/dice/${file.path}`;
@@ -158,7 +152,7 @@ const App = () => {
             const mat = cv.imread(canvas);
             const grayMat = new cv.Mat();
             cv.cvtColor(mat, grayMat, cv.COLOR_RGBA2GRAY, 0);
-            mat.delete(); // Clean up rgba mat immediately
+            mat.delete(); 
             resolve({ id: file.id, grayMat });
           } catch (e) {
             console.error("Template processing error:", file.path, e);
@@ -309,11 +303,10 @@ const App = () => {
         );
         cv.resize(graySiteROI, enlargedSiteROI, enlargedSize, 0, 0, cv.INTER_CUBIC);
         
-        // --- IMPROVEMENT: Equalize Hist to enhance site icon details ---
         cv.equalizeHist(enlargedSiteROI, enlargedSiteROI);
 
         const diceScales = lastSuccessfulScale.current ? [lastSuccessfulScale.current] : [0.8, 0.9, 1.0, 1.1, 1.2];
-        const siteScales = [0.9, 1.0, 1.1]; // Restrict scales for UI elements (Site dice)
+        const siteScales = [0.9, 1.0, 1.1]; 
 
         let diceCandidates = [];
         let siteCandidates = [];
@@ -322,11 +315,10 @@ const App = () => {
             const isSiteCategory = tmpl.id.startsWith('S_');
             const searchImg = isSiteCategory ? enlargedSiteROI : grayDiceROI;
             
-            // Use specific scales based on category
+
             const currentScales = isSiteCategory ? siteScales : diceScales;
 
             for (const s of currentScales) {
-                // Adjust scale for enlarged image
                 let currentScale = isSiteCategory ? (s * SITE_SCALE_FACTOR) : s;
                 let resizedTmpl = track(new cv.Mat());
                 
@@ -344,7 +336,6 @@ const App = () => {
 
                 let data = dst.data32F;
                 
-                // --- IMPROVEMENT: Higher threshold for Site dice to reduce false positives ---
                 const threshold = isSiteCategory ? 0.6 : 0.75; 
 
                 for (let row = 0; row < dst.rows; row += 2) {
@@ -352,7 +343,6 @@ const App = () => {
                         const score = data[row * dst.cols + col];
                         if (score > threshold) {
                             if (isSiteCategory) {
-                                // Map coordinates back to original size
                                 const downScale = 1.0 / SITE_SCALE_FACTOR;
                                 siteCandidates.push({
                                     id: tmpl.id, score,
@@ -417,7 +407,6 @@ const App = () => {
 
         if (finalDice.length >= 2) lastSuccessfulScale.current = finalDice[0].usedScale;
 
-        // --- OPTIMIZATION: Check if OCR area changed ---
         let ocrResult = { rawText: "", effects: [] };
         let shouldRunOCR = true;
 
@@ -429,10 +418,9 @@ const App = () => {
             
             const diff = new cv.Mat();
             cv.absdiff(attrROI, lastAttrMatRef.current, diff);
-            const nonZero = cv.countNonZero(diff); // Count changed pixels
+            const nonZero = cv.countNonZero(diff); 
             diff.delete();
 
-            // If less than 50 pixels changed, consider it identical (skip OCR)
             if (nonZero < 50) { 
                 shouldRunOCR = false;
             }
@@ -447,14 +435,12 @@ const App = () => {
                 
                 ocrResult = await runOCR(cv, cleanCanvas, attrRect);
 
-                // Cache the result and the image
                 lastOcrResultRef.current = ocrResult;
                 
                 if (lastAttrMatRef.current) lastAttrMatRef.current.delete();
                 lastAttrMatRef.current = attrROI.clone();
             }
         } else {
-            // Reuse previous result
             ocrResult = lastOcrResultRef.current || { rawText: "", effects: [] };
         }
 
@@ -574,7 +560,6 @@ const App = () => {
         cv.resize(roi, enlarged, dsize, 0, 0, cv.INTER_CUBIC);
         cv.cvtColor(enlarged, enlarged, cv.COLOR_RGBA2GRAY, 0);
 
-        // --- IMPROVEMENT: Gaussian Blur to reduce noise ---
         let ksize = new cv.Size(3, 3);
         cv.GaussianBlur(enlarged, enlarged, ksize, 0, 0, cv.BORDER_DEFAULT);
 
@@ -652,7 +637,7 @@ const App = () => {
   return (
     <div className="app-container">
       <header className="header">
-        <h2 className="title">Mystic Frontier Calculator (Optimized)</h2>
+        <h2 className="title">Mystic Frontier Calculator (Beta)</h2>
         <div className="header-actions">
           <a href="https://www.buymeacoffee.com/Syou" target="_blank" rel="noreferrer" style={{ display: 'flex' }}>
             <img 
