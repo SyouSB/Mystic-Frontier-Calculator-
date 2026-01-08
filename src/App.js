@@ -666,7 +666,7 @@ const App = () => {
         roi = srcMat.roi(rect);
 
         enlarged = new cv.Mat();
-        let scale = 3.0; 
+        let scale = 4.0; 
         let dsize = new cv.Size(region.w * scale, region.h * scale);
         cv.resize(roi, enlarged, dsize, 0, 0, cv.INTER_CUBIC);
         
