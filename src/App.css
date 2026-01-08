@@ -41,6 +41,33 @@ body {
   gap: 15px;
 }
 
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--card-border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.debug-toggle:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #555;
+}
+
+.debug-toggle input {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-tertiary);
+}
+
 .title {
   font-size: 1.5rem;
   font-weight: 700;

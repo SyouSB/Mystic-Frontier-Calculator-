@@ -5,11 +5,11 @@ import './App.css';
 // 기준 해상도: 1366 x 768 
 const ROI_PCT = {
   DICE: { x: 380/1366, y: 300/768, w: 600/1366, h: 200/768 },
-  ATTR: { x: 330/1366, y: 520/768, w: 700/1366, h: 100/768 },
+  ATTR: { x: 300/1366, y: 480/768, w: 730/1366, h: 180/768 },
   SITE: { x: 566/1366, y: 595/768, w: 280/1366, h: 65/768 }
 };
 
-const SITE_SCALE_FACTOR = 4.0;
+const SITE_SCALE_FACTOR = 2.5;
 
 const PATTERNS = {
   diceTotal: /Dice\s*Total\s*[:;.]?\s*([+-]?\d+)/i,
@@ -83,6 +83,7 @@ const SITE_VALUES = {
 
 const App = () => {
   const [isReady, setIsReady] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
   const [analysisResult, setAnalysisResult] = useState({
     attributesText: '',
     parsedEffects: [], 
@@ -99,7 +100,7 @@ const App = () => {
   
   const lastAttrMatRef = useRef(null);
   const lastOcrResultRef = useRef(null);
-  const analysisIntervalRef = useRef(null);
+  const analysisTimerRef = useRef(null);
 
   useEffect(() => {
     const initWorker = async () => {
@@ -120,8 +121,8 @@ const App = () => {
       if (workerRef.current) {
         workerRef.current.terminate();
       }
-      if (analysisIntervalRef.current) {
-        clearInterval(analysisIntervalRef.current);
+      if (analysisTimerRef.current) {
+        clearTimeout(analysisTimerRef.current);
       }
       if (lastAttrMatRef.current) {
         lastAttrMatRef.current.delete();
@@ -149,11 +150,18 @@ const App = () => {
             canvas.width = img.width; canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
-            const mat = cv.imread(canvas);
-            const grayMat = new cv.Mat();
-            cv.cvtColor(mat, grayMat, cv.COLOR_RGBA2GRAY, 0);
-            mat.delete(); 
-            resolve({ id: file.id, grayMat });
+            const raw = cv.imread(canvas);
+            const mat = new cv.Mat();
+            
+            // Site templates -> RGB, Dice -> Gray
+            if (file.id.startsWith('S_')) {
+                cv.cvtColor(raw, mat, cv.COLOR_RGBA2RGB, 0);
+            } else {
+                cv.cvtColor(raw, mat, cv.COLOR_RGBA2GRAY, 0);
+            }
+            
+            raw.delete(); 
+            resolve({ id: file.id, mat });
           } catch (e) {
             console.error("Template processing error:", file.path, e);
             resolve(null);
@@ -166,6 +174,38 @@ const App = () => {
     }));
 
     const results = await Promise.all(promises);
+    
+    // Pre-compute resized templates for optimization
+    const diceScales = [0.8, 0.9, 1.0, 1.1, 1.2];
+    const siteScales = [0.9, 1.0, 1.1];
+
+    results.forEach(tmpl => {
+        if (!tmpl || !tmpl.mat) return;
+        tmpl.precomputed = {};
+        
+        const isSite = tmpl.id.startsWith('S_');
+        const scales = isSite ? siteScales : diceScales;
+
+        scales.forEach(s => {
+            try {
+                const finalScale = isSite ? (s * SITE_SCALE_FACTOR) : s;
+                const tW = Math.round(tmpl.mat.cols * finalScale);
+                const tH = Math.round(tmpl.mat.rows * finalScale);
+                
+                const resized = new cv.Mat();
+                cv.resize(tmpl.mat, resized, new cv.Size(tW, tH), 0, 0, cv.INTER_CUBIC);
+                
+                // Store using the base scale as key
+                tmpl.precomputed[s] = resized;
+            } catch (e) {
+                console.warn(`Pre-computation failed for ${tmpl.id} at scale ${s}`, e);
+            }
+        });
+        
+        // Optionally delete the original mat if not needed, 
+        // but keeping it is safer if dynamic scaling is needed later.
+    });
+
     templatesRef.current = results.filter(r => r !== null);
   }, []);
 
@@ -186,11 +226,32 @@ const App = () => {
       videoRef.current.srcObject = stream;
       videoRef.current.play();
       
-      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
-      analysisIntervalRef.current = setInterval(analyzeFrame, 1000);
+      if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
+      analysisTimerRef.current = setTimeout(analyzeFrame, 300);
     } catch (err) {
       console.error("Error accessing screen:", err);
     }
+  };
+
+  const drawROIs = (ctx, cw, ch) => {
+    ctx.lineWidth = 2;
+    ctx.font = "bold 16px Arial";
+    ctx.fillStyle = "yellow";
+
+    const draw = (roi, color, label) => {
+        const x = Math.floor(roi.x * cw);
+        const y = Math.floor(roi.y * ch);
+        const w = Math.floor(roi.w * cw);
+        const h = Math.floor(roi.h * ch);
+        
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x, y, w, h);
+        ctx.fillText(label, x, y - 5);
+    };
+
+    draw(ROI_PCT.ATTR, 'rgba(255, 0, 0, 0.8)', "ATTR");
+    draw(ROI_PCT.SITE, 'rgba(0, 0, 255, 0.8)', "SITE");
+    draw(ROI_PCT.DICE, 'rgba(0, 255, 0, 0.8)', "DICE");
   };
 
   const getRankFromROI = (cv, srcMat, rect) => {
@@ -261,7 +322,14 @@ const App = () => {
         const cw = canvas.width;
         const ch = canvas.height;
 
+        if (showDebug) {
+             drawROIs(ctx, cw, ch);
+        }
+
         const src = track(cv.imread(canvas));
+        const srcRGB = track(new cv.Mat());
+        cv.cvtColor(src, srcRGB, cv.COLOR_RGBA2RGB, 0);
+
         const gray = track(new cv.Mat());
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
@@ -284,26 +352,25 @@ const App = () => {
           h: Math.floor(ROI_PCT.DICE.h * ch)
         };
 
-        if (siteRect.x + siteRect.w > gray.cols) siteRect.w = gray.cols - siteRect.x;
-        if (siteRect.y + siteRect.h > gray.rows) siteRect.h = gray.rows - siteRect.y;
-        if (diceRect.x + diceRect.w > gray.cols) diceRect.w = gray.cols - diceRect.x;
-        if (diceRect.y + diceRect.h > gray.rows) diceRect.h = gray.rows - diceRect.y;
+        if (siteRect.x + siteRect.w > cw) siteRect.w = cw - siteRect.x;
+        if (siteRect.y + siteRect.h > ch) siteRect.h = ch - siteRect.y;
+        if (diceRect.x + diceRect.w > cw) diceRect.w = cw - diceRect.x;
+        if (diceRect.y + diceRect.h > ch) diceRect.h = ch - diceRect.y;
 
         const siteROI = new cv.Rect(siteRect.x, siteRect.y, siteRect.w, siteRect.h);
         const diceROI = new cv.Rect(diceRect.x, diceRect.y, diceRect.w, diceRect.h);
 
-        let graySiteROI = track(gray.roi(siteROI));
-        let grayDiceROI = track(gray.roi(diceROI)); 
-
+        // Site Search Area (RGB)
+        let siteROI_RGB = track(srcRGB.roi(siteROI));
         let enlargedSiteROI = track(new cv.Mat());
-        // Use SITE_SCALE_FACTOR variable
         let enlargedSize = new cv.Size(
             Math.round(siteROI.width * SITE_SCALE_FACTOR), 
             Math.round(siteROI.height * SITE_SCALE_FACTOR)
         );
-        cv.resize(graySiteROI, enlargedSiteROI, enlargedSize, 0, 0, cv.INTER_CUBIC);
+        cv.resize(siteROI_RGB, enlargedSiteROI, enlargedSize, 0, 0, cv.INTER_CUBIC);
         
-        cv.equalizeHist(enlargedSiteROI, enlargedSiteROI);
+        // Dice Search Area (Grayscale)
+        let grayDiceROI = track(gray.roi(diceROI)); 
 
         const diceScales = lastSuccessfulScale.current ? [lastSuccessfulScale.current] : [0.8, 0.9, 1.0, 1.1, 1.2];
         const siteScales = [0.9, 1.0, 1.1]; 
@@ -313,24 +380,20 @@ const App = () => {
 
         for (const tmpl of templatesRef.current) {
             const isSiteCategory = tmpl.id.startsWith('S_');
+            // Use RGB image for Site templates, Grayscale for Dice
             const searchImg = isSiteCategory ? enlargedSiteROI : grayDiceROI;
             
-
             const currentScales = isSiteCategory ? siteScales : diceScales;
 
             for (const s of currentScales) {
-                let currentScale = isSiteCategory ? (s * SITE_SCALE_FACTOR) : s;
-                let resizedTmpl = track(new cv.Mat());
+                // Use pre-computed template
+                const resizedTmpl = tmpl.precomputed ? tmpl.precomputed[s] : null;
+                if (!resizedTmpl) continue;
                 
-                const tW = Math.round(tmpl.grayMat.cols * currentScale);
-                const tH = Math.round(tmpl.grayMat.rows * currentScale);
-                
-                if (tW > searchImg.cols || tH > searchImg.rows) {
+                if (resizedTmpl.cols > searchImg.cols || resizedTmpl.rows > searchImg.rows) {
                      continue;
                 }
 
-                cv.resize(tmpl.grayMat, resizedTmpl, new cv.Size(tW, tH), 0, 0, cv.INTER_CUBIC);
-                
                 let dst = track(new cv.Mat());
                 cv.matchTemplate(searchImg, resizedTmpl, dst, cv.TM_CCOEFF_NORMED);
 
@@ -394,15 +457,10 @@ const App = () => {
         const finalDice = applyNMS(diceCandidates, 0.4).sort((a, b) => a.x - b.x);
         let detectedSites = applyNMS(siteCandidates, 0.4); 
 
+        // Simplified: Just calculate RGB for display, do NOT override rank.
         const finalSites = detectedSites.map(site => {
-            const { rank, r, g, b } = getRankFromROI(cv, src, site);
-            const parts = site.id.split('_');
-            let newId = site.id;
-            if (parts.length >= 3) {
-                parts[parts.length - 1] = rank;
-                newId = parts.join('_');
-            }
-            return { ...site, id: newId, r, g, b };
+            const { r, g, b } = getRankFromROI(cv, src, site);
+            return { ...site, r, g, b };
         }).sort((a, b) => a.x - b.x);    
 
         if (finalDice.length >= 2) lastSuccessfulScale.current = finalDice[0].usedScale;
@@ -453,6 +511,8 @@ const App = () => {
             try { if(mat && !mat.isDeleted()) mat.delete(); } catch(e) {}
         });
         isAnalyzingRef.current = false;
+        // Schedule next analysis
+        analysisTimerRef.current = setTimeout(analyzeFrame, 500);
     }
   };
 
@@ -460,38 +520,95 @@ const App = () => {
       const checkCondition = (condition, dice) => {
         const text = condition.toLowerCase().trim();
         if (!text) return true;
-        const getVal = (idx) => parseInt(dice[idx]?.id || 0);
-        const ordinals = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4 };
 
-        if (text.includes("add up to")) {
-          const targetIndices = [];
-          Object.keys(ordinals).forEach(ord => { if (text.includes(ord)) targetIndices.push(ordinals[ord]); });
-          if (targetIndices.length === 0) dice.forEach((_, i) => targetIndices.push(i));
-          const targetMatch = text.match(/(\d+)/);
-          const target = targetMatch ? parseInt(targetMatch[1]) : 0;
-          if (targetIndices.length > 0 && target > 0) {
-              return targetIndices.every(idx => {
-                  const d = dice[idx];
-                  return d && parseInt(d.id) >= target;
-              });
-          }
+        // 0. Handle Passive Rules
+        if (text.startsWith("prevents")) return true;
+        
+        const getVal = (idx) => {
+            const d = dice[idx];
+            return d ? parseInt(d.id) : 0;
+        };
+        const hasDie = (idx) => !!dice[idx];
+
+        const ordinals = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4 };
+        let targetIndices = [];
+        
+        // 1. Identify Target Indices
+        if (/all three|all 3|the three/i.test(text)) {
+            targetIndices = [0, 1, 2];
+        } else {
+            Object.keys(ordinals).forEach(ord => {
+                if (text.includes(ord)) targetIndices.push(ordinals[ord]);
+            });
         }
-        if (text.includes("consecutive numbers")) {
-          if (dice.length < 2) return false;
-          const vals = dice.map(d => parseInt(d.id)).sort((a, b) => a - b);
+        
+        // 2. Evaluate Logic (Mutually Exclusive)
+
+        // A. Match Logic
+        if (text.includes("match")) {
+            if (targetIndices.length < 2) return false;
+            if (!targetIndices.every(hasDie)) return false;
+            const firstVal = getVal(targetIndices[0]);
+            return targetIndices.every(idx => getVal(idx) === firstVal);
+        }
+
+        // B. Roll Specific Value Logic
+        const rollMatch = text.match(/roll(?:s)? a\s*(\d+)/);
+        if (rollMatch) {
+            const targetVal = parseInt(rollMatch[1]);
+            
+            if (targetIndices.length > 0) {
+                // "If the first die rolls a X" or "If all three dice roll a X"
+                if (!targetIndices.every(hasDie)) return false;
+                return targetIndices.every(idx => getVal(idx) === targetVal);
+            } else {
+                // "If a die rolls a X" (no indices specified)
+                return dice.some(d => parseInt(d.id) === targetVal);
+            }
+        }
+
+        // C. Add Up To Logic (Each die >= X)
+        if (text.includes("add up to")) {
+          // Implicit "all" if not specified, though usually "all three" is caught above
+          if (targetIndices.length === 0) targetIndices = [0, 1, 2]; 
+
+          const sumMatch = text.match(/add up to\s*(\d+)/);
+          const targetVal = sumMatch ? parseInt(sumMatch[1]) : 0;
+          
+          if (!targetIndices.every(hasDie)) return false;
+          return targetIndices.every(idx => getVal(idx) >= targetVal);
+        }
+
+        // D. Consecutive Logic
+        if (text.includes("consecutive")) {
+          if (targetIndices.length === 0) targetIndices = [0, 1, 2];
+          
+          if (targetIndices.length < 2) return false;
+          if (!targetIndices.every(hasDie)) return false;
+
+          const vals = targetIndices.map(idx => getVal(idx)).sort((a, b) => a - b);
           for (let i = 0; i < vals.length - 1; i++) {
             if (vals[i+1] !== vals[i] + 1) return false;
           }
           return true;
         }
+
+        // E. Even / Odd Logic
         if (text.includes("even number") || text.includes("odd number")) {
           const isEven = text.includes("even number");
-          for (const [ord, idx] of Object.entries(ordinals)) {
-            if (text.includes(ord)) {
-               if (!dice[idx]) return false;
-               const val = getVal(idx);
-               return isEven ? (val % 2 === 0) : (val % 2 !== 0);
-            }
+          
+          if (targetIndices.length > 0) {
+              if (!targetIndices.every(hasDie)) return false;
+              return targetIndices.every(idx => {
+                  const val = getVal(idx);
+                  return isEven ? (val % 2 === 0) : (val % 2 !== 0);
+              });
+          } else {
+              // "If a die rolls an odd number"
+              return dice.some(d => {
+                  const val = parseInt(d.id);
+                  return isEven ? (val % 2 === 0) : (val % 2 !== 0);
+              });
           }
         }
         return true;
@@ -639,6 +756,14 @@ const App = () => {
       <header className="header">
         <h2 className="title">Mystic Frontier Calculator (Beta)</h2>
         <div className="header-actions">
+          <label className="debug-toggle">
+            <input 
+              type="checkbox" 
+              checked={showDebug} 
+              onChange={(e) => setShowDebug(e.target.checked)}
+            />
+            Show Debug
+          </label>
           <a href="https://www.buymeacoffee.com/Syou" target="_blank" rel="noreferrer" style={{ display: 'flex' }}>
             <img 
               src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" 
