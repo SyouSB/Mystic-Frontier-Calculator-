@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/Mystic-Frontier-Calculator-/static/css/main.e1c50f68.css",
-    "main.js": "/Mystic-Frontier-Calculator-/static/js/main.87a58fa9.js",
+    "main.css": "/Mystic-Frontier-Calculator-/static/css/main.ce1bef1d.css",
+    "main.js": "/Mystic-Frontier-Calculator-/static/js/main.24f2c78b.js",
     "static/js/453.a20e7a0e.chunk.js": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js",
     "index.html": "/Mystic-Frontier-Calculator-/index.html",
-    "main.e1c50f68.css.map": "/Mystic-Frontier-Calculator-/static/css/main.e1c50f68.css.map",
-    "main.87a58fa9.js.map": "/Mystic-Frontier-Calculator-/static/js/main.87a58fa9.js.map",
+    "main.ce1bef1d.css.map": "/Mystic-Frontier-Calculator-/static/css/main.ce1bef1d.css.map",
+    "main.24f2c78b.js.map": "/Mystic-Frontier-Calculator-/static/js/main.24f2c78b.js.map",
     "453.a20e7a0e.chunk.js.map": "/Mystic-Frontier-Calculator-/static/js/453.a20e7a0e.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.e1c50f68.css",
-    "static/js/main.87a58fa9.js"
+    "static/css/main.ce1bef1d.css",
+    "static/js/main.24f2c78b.js"
   ]
 }
